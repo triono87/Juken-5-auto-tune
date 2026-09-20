@@ -5,7 +5,7 @@
         android:allowBackup="true"
         android:label="Juken 5 Auto Tune"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Juken5AutoTune">
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
         <activity
             android:name=".MainActivity"
