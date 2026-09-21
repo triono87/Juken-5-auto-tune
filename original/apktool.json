@@ -1,0 +1,31 @@
+{
+  "apkFileName": "Juken-5--Android-2.2.0_src.apk",
+  "PackageInfo": {
+    "forcedPackageId": "127",
+    "renameManifestPackage": null
+  },
+  "doNotCompress": [
+    "resources.arsc",
+    "png"
+  ],
+  "compressionType": false,
+  "sparseResources": false,
+  "version": "2.4.0-260818",
+  "sharedLibrary": false,
+  "VersionInfo": {
+    "versionName": "2.2.0",
+    "versionCode": "1"
+  },
+  "UsesFramework": {
+    "ids": [1],
+    "tag": null
+  },
+  "unknownFiles": {},
+  "apkFilePath": "/storage/emulated/0/Download/Juken-5--Android-2.2.0.apk",
+  "compactEntries": false,
+  "isFrameworkApk": false,
+  "sdkInfo": {
+    "minSdkVersion": "17",
+    "targetSdkVersion": "25"
+  }
+}
