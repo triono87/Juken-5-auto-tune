@@ -146,4 +146,26 @@ public final class EcuProtocol {
             this.raw = raw;
         }
     }
+    /** Builds a read request for a map row. Kept isolated until the opcode is verified. */
+    public static String buildReadMapRow(String readOpcode, int row) {
+        return readMapCommand(readOpcode, row);
+    }
+
+    /** Returns a normalized 21-cell row for comparison/display. */
+    public static float[] normalizeMapRow(float[] values) {
+        float[] out = new float[TPS_BREAKPOINTS.length];
+        if (values == null) return out;
+        for (int i = 0; i < out.length && i < values.length; i++) out[i] = values[i];
+        return out;
+    }
+
+    /** Absolute cell-by-cell difference between ECU and app maps. */
+    public static float[] compareMapRow(float[] ecuValues, float[] appValues) {
+        float[] ecu = normalizeMapRow(ecuValues);
+        float[] app = normalizeMapRow(appValues);
+        float[] diff = new float[TPS_BREAKPOINTS.length];
+        for (int i = 0; i < diff.length; i++) diff[i] = ecu[i] - app[i];
+        return diff;
+    }
+
 }
