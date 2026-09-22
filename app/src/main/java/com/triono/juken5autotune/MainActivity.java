@@ -41,6 +41,8 @@ public class MainActivity extends Activity {
     private Spinner btSpinner;
     private TextView btStatus;
     private TextView rawData;
+    private TextView liveTelemetry;
+    private final StringBuilder ecuTextBuffer = new StringBuilder();
     private TextView analyzerStatus;
     private Button recordButton;
     private final ProtocolAnalyzer protocolAnalyzer = new ProtocolAnalyzer();
@@ -108,6 +110,23 @@ public class MainActivity extends Activity {
         rawData.setTextSize(11);
         rawData.setMaxLines(3);
         btPanel.addView(rawData);
+
+        liveTelemetry = new TextView(this);
+        liveTelemetry.setText("LIVE ECU: belum aktif");
+        liveTelemetry.setTextSize(14);
+        liveTelemetry.setPadding(4, 6, 4, 6);
+        btPanel.addView(liveTelemetry);
+
+        LinearLayout protocolButtons = new LinearLayout(this);
+        Button liveStart = new Button(this);
+        liveStart.setText("LIVE START");
+        liveStart.setOnClickListener(v -> sendLiveStart());
+        Button liveStop = new Button(this);
+        liveStop.setText("LIVE STOP");
+        liveStop.setOnClickListener(v -> sendLiveStop());
+        protocolButtons.addView(liveStart, new LinearLayout.LayoutParams(0, 52, 1));
+        protocolButtons.addView(liveStop, new LinearLayout.LayoutParams(0, 52, 1));
+        btPanel.addView(protocolButtons);
         root.addView(btPanel);
         LinearLayout analyzerPanel = new LinearLayout(this);
         analyzerPanel.setOrientation(LinearLayout.VERTICAL);
@@ -154,11 +173,14 @@ public class MainActivity extends Activity {
         ecuTransport = new BluetoothEcuTransport(this, new BluetoothEcuTransport.Listener() {
             @Override public void onConnected(BluetoothDevice device) {
                 btStatus.setText("ECU BLUETOOTH: CONNECTED - " + device.getName());
-                status.setText("STATUS: ECU CONNECTED (RAW MODE)");
+                status.setText("STATUS: ECU CONNECTED");
+                sendCommand(EcuProtocol.IDENTITY);
+                sendCommand(EcuProtocol.SETTINGS);
             }
             @Override public void onBytes(byte[] data, int length) {
                 StringBuilder hex = new StringBuilder();
                 protocolAnalyzer.add(data, length);
+                consumeEcuText(data, length);
                 updateAnalyzerStatus();
                 for (int i = 0; i < length; i++) hex.append(String.format(Locale.US, "%02X ", data[i] & 0xFF));
                 rawData.setText("RAW ECU DATA: " + hex.toString().trim());
@@ -385,15 +407,15 @@ public class MainActivity extends Activity {
     }
 
     private void buildAxes() {
-        // 61 rows distributed across the requested 0–16000 RPM range.
+        // Original-style 61 RPM rows: 1000..16000 in 250-RPM steps.
         for (int i = 0; i < RPM_ROWS; i++) {
-            int rpm = (int) Math.round((16000.0 * i) / (RPM_ROWS - 1));
+            int rpm = EcuProtocol.rpmForRow(i);
             rpmAxis[i] = String.valueOf(rpm);
         }
 
-        // 21 TPS columns: 0, 5, ... 100%.
+        // Original-style 21 TPS/load breakpoints.
         for (int i = 0; i < TPS_COLS; i++) {
-            tpsAxis[i] = String.valueOf(i * 5);
+            tpsAxis[i] = String.valueOf(EcuProtocol.TPS_BREAKPOINTS[i]);
         }
     }
 
@@ -426,6 +448,54 @@ public class MainActivity extends Activity {
         return view;
     }
 
+    private void sendCommand(String command) {
+        if (ecuTransport == null) return;
+        ecuTransport.writeRaw(command.getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+    }
+
+    private void sendLiveStart() {
+        sendCommand(EcuProtocol.LIVE_START);
+        status.setText("STATUS: LIVE STREAM STARTED");
+    }
+
+    private void sendLiveStop() {
+        sendCommand(EcuProtocol.LIVE_STOP);
+        status.setText("STATUS: LIVE STREAM STOPPED");
+    }
+
+    private void consumeEcuText(byte[] data, int length) {
+        String text = new String(data, 0, length, java.nio.charset.StandardCharsets.US_ASCII);
+        synchronized (ecuTextBuffer) {
+            ecuTextBuffer.append(text);
+            int nl;
+            while ((nl = ecuTextBuffer.indexOf("\n")) >= 0) {
+                String line = ecuTextBuffer.substring(0, nl).replace("\r", "").trim();
+                ecuTextBuffer.delete(0, nl + 1);
+                if (!line.isEmpty()) handleProtocolLine(line);
+            }
+            if (ecuTextBuffer.length() > 8192) ecuTextBuffer.delete(0, ecuTextBuffer.length() - 4096);
+        }
+    }
+
+    private void handleProtocolLine(String line) {
+        EcuProtocol.LiveData live = EcuProtocol.parseLiveLine(line);
+        if (live == null) return;
+        liveTelemetry.setText(String.format(Locale.US,
+                "LIVE ECU  RPM %d | TPS %d%% | AFR %.2f\nBAT %.2fV | EOT %.1f°C | IAT %.1f°C\nBASE %.2f | FUEL CORR %.1f%% | IT %.1f | IG %.1f°",
+                live.rpm, live.tps, live.afr, live.battery, live.exhaustTemp,
+                live.intakeTemp, live.baseMap, live.fuelCorrection,
+                live.injectorTiming, live.ignitionTiming));
+        rpmInput.setText(String.valueOf(live.rpm));
+        tpsInput.setText(String.valueOf(live.tps));
+        afrInput.setText(String.format(Locale.US, "%.2f", live.afr));
+        if (autoTuneRunning && live.afr > 0f) {
+            try {
+                double target = Double.parseDouble(targetInput.getText().toString());
+                correction = AutoTuneEngine.correctionPercent(live.afr, target);
+                correctionText.setText(String.format(Locale.US, "LIVE Fuel Correction: %.1f %%", correction));
+            } catch (Exception ignored) {}
+        }
+    }
     private void calculateCorrection() {
         try {
             double actual = Double.parseDouble(afrInput.getText().toString());
