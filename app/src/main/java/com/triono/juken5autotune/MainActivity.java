@@ -6,7 +6,6 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.text.InputType;
 import android.view.Gravity;
-import android.view.View;
 import android.widget.*;
 
 import java.util.Locale;
@@ -15,409 +14,278 @@ public class MainActivity extends Activity {
 
     private TextView status;
     private TextView correctionText;
-
-    private EditText rpmInput;
     private EditText afrInput;
     private EditText targetInput;
+    private EditText rpmInput;
     private EditText tpsInput;
 
-    private EditText selectedCell = null;
+    private EditText selectedCell;
+    private int selectedRow = -1;
+    private int selectedCol = -1;
 
-    private final String[] RPM = {
-            "1500","2000","2500","3000",
-            "3500","4000","4500","5000",
-            "5500","6000","6500","7000",
-            "7500","8000","8500","9000"
-    };
+    private static final int RPM_ROWS = 61;
+    private static final int TPS_COLS = 21;
 
-    private final String[] TPS = {
-            "0","5","10","15",
-            "20","25","30","40",
-            "50","60","70","80",
-            "90","100","110","120"
-    };
-
-    private EditText[][] fuelCells = new EditText[16][16];
+    private final String[] rpmAxis = new String[RPM_ROWS];
+    private final String[] tpsAxis = new String[TPS_COLS];
+    private final EditText[][] fuelCells = new EditText[RPM_ROWS][TPS_COLS];
 
     private double correction = 0.0;
+    private boolean autoTuneRunning = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        buildAxes();
+
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(16,16,16,16);
+        root.setPadding(12, 12, 12, 12);
         root.setBackgroundColor(Color.WHITE);
 
         TextView title = new TextView(this);
         title.setText("Juken 5 Auto Tune");
-        title.setTextSize(28);
+        title.setTextSize(26);
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         title.setTextColor(Color.DKGRAY);
         title.setGravity(Gravity.CENTER);
         root.addView(title);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("16 × 16 Fuel Map");
-        subtitle.setTextSize(18);
+        subtitle.setText("Fuel Map 61 RPM × 21 TPS | RPM 0–16000 | TPS 0–100%");
+        subtitle.setTextSize(14);
         subtitle.setTextColor(Color.GRAY);
         subtitle.setGravity(Gravity.CENTER);
+        subtitle.setPadding(0, 4, 0, 10);
         root.addView(subtitle);
 
         status = new TextView(this);
         status.setText("STATUS: READY");
-        status.setTextSize(20);
+        status.setTextSize(18);
         status.setGravity(Gravity.CENTER);
-        status.setPadding(5,15,5,15);
+        status.setPadding(4, 8, 4, 8);
         root.addView(status);
 
         LinearLayout inputPanel = new LinearLayout(this);
         inputPanel.setOrientation(LinearLayout.VERTICAL);
 
         rpmInput = createInput("RPM", "3000");
+        tpsInput = createInput("TPS %", "20");
         afrInput = createInput("Actual AFR", "14.7");
         targetInput = createInput("Target AFR", "13.2");
-        tpsInput = createInput("TPS %", "20");
 
         inputPanel.addView(rpmInput);
+        inputPanel.addView(tpsInput);
         inputPanel.addView(afrInput);
         inputPanel.addView(targetInput);
-        inputPanel.addView(tpsInput);
-
         root.addView(inputPanel);
 
         Button calculate = new Button(this);
-        calculate.setText("CALCULATE FUEL CORRECTION");
-        calculate.setTextSize(16);
-
+        calculate.setText("CALCULATE AFR CORRECTION");
         calculate.setOnClickListener(v -> calculateCorrection());
-
         root.addView(calculate);
 
         correctionText = new TextView(this);
         correctionText.setText("Fuel Correction: 0.0 %");
-        correctionText.setTextSize(22);
+        correctionText.setTextSize(21);
         correctionText.setGravity(Gravity.CENTER);
-        correctionText.setPadding(5,10,5,10);
-
+        correctionText.setPadding(4, 8, 4, 8);
         root.addView(correctionText);
+
+        LinearLayout controls = new LinearLayout(this);
+        controls.setOrientation(LinearLayout.HORIZONTAL);
 
         Button start = new Button(this);
         start.setText("START AUTO TUNE");
-
         start.setOnClickListener(v -> {
+            autoTuneRunning = true;
             status.setText("STATUS: AUTO TUNE RUNNING");
-            status.setTextColor(Color.rgb(0,120,0));
+            status.setTextColor(Color.rgb(0, 120, 0));
         });
-
-        root.addView(start);
 
         Button stop = new Button(this);
         stop.setText("STOP");
-
         stop.setOnClickListener(v -> {
+            autoTuneRunning = false;
             status.setText("STATUS: STOPPED");
             status.setTextColor(Color.RED);
         });
 
-        root.addView(stop);
+        controls.addView(start, new LinearLayout.LayoutParams(0, 55, 1));
+        controls.addView(stop, new LinearLayout.LayoutParams(0, 55, 1));
+        root.addView(controls);
 
         TextView mapTitle = new TextView(this);
-        mapTitle.setText("FUEL MAP 16 × 16");
-        mapTitle.setTextSize(22);
+        mapTitle.setText("FUEL MAP 61 × 21");
+        mapTitle.setTextSize(20);
         mapTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         mapTitle.setGravity(Gravity.CENTER);
-        mapTitle.setPadding(5,20,5,10);
-
+        mapTitle.setPadding(4, 12, 4, 8);
         root.addView(mapTitle);
 
-        /*
-         * HORIZONTAL SCROLL
-         */
         HorizontalScrollView horizontal = new HorizontalScrollView(this);
-
-        /*
-         * VERTICAL SCROLL
-         */
         ScrollView vertical = new ScrollView(this);
-
         TableLayout table = new TableLayout(this);
         table.setStretchAllColumns(false);
 
-        /*
-         * HEADER
-         */
         TableRow header = new TableRow(this);
+        header.addView(createHeader("RPM/TPS"));
 
-        TextView corner = createHeader("RPM/TPS");
-        header.addView(corner);
-
-        for (String tps : TPS) {
-            TextView h = createHeader(tps);
-            header.addView(h);
+        for (String tps : tpsAxis) {
+            header.addView(createHeader(tps));
         }
-
         table.addView(header);
 
-        /*
-         * MAP CELLS
-         */
-        for (int r = 0; r < 16; r++) {
-
+        for (int r = 0; r < RPM_ROWS; r++) {
             TableRow row = new TableRow(this);
+            row.addView(createHeader(rpmAxis[r]));
 
-            TextView rpmLabel = createHeader(RPM[r]);
-            row.addView(rpmLabel);
-
-            for (int c = 0; c < 16; c++) {
-
+            for (int c = 0; c < TPS_COLS; c++) {
                 EditText cell = new EditText(this);
-
                 cell.setText("100");
-                cell.setTextSize(13);
+                cell.setTextSize(11);
                 cell.setGravity(Gravity.CENTER);
                 cell.setSingleLine(true);
+                cell.setInputType(InputType.TYPE_CLASS_NUMBER
+                        | InputType.TYPE_NUMBER_FLAG_DECIMAL
+                        | InputType.TYPE_NUMBER_FLAG_SIGNED);
 
-                cell.setInputType(
-                        InputType.TYPE_CLASS_NUMBER |
-                        InputType.TYPE_NUMBER_FLAG_DECIMAL |
-                        InputType.TYPE_NUMBER_FLAG_SIGNED
-                );
-
-                TableRow.LayoutParams params =
-                        new TableRow.LayoutParams(85,60);
-
-                params.setMargins(1,1,1,1);
-
-                cell.setLayoutParams(params);
+                TableRow.LayoutParams p = new TableRow.LayoutParams(78, 54);
+                p.setMargins(1, 1, 1, 1);
+                cell.setLayoutParams(p);
 
                 final int rr = r;
                 final int cc = c;
-
                 cell.setOnFocusChangeListener((v, hasFocus) -> {
-
                     if (hasFocus) {
-
                         selectedCell = cell;
-
-                        status.setText(
-                                "SELECTED: RPM " + RPM[rr] +
-                                " / TPS " + TPS[cc] + "%"
-                        );
+                        selectedRow = rr;
+                        selectedCol = cc;
+                        status.setText("SELECTED: RPM " + rpmAxis[rr]
+                                + " / TPS " + tpsAxis[cc] + "%");
+                        status.setTextColor(Color.DKGRAY);
                     }
                 });
 
                 fuelCells[r][c] = cell;
-
                 row.addView(cell);
             }
-
             table.addView(row);
         }
 
         vertical.addView(table);
         horizontal.addView(vertical);
 
-        root.addView(
-                horizontal,
-                new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        0,
-                        1
-                )
-        );
+        root.addView(horizontal, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1));
 
-        /*
-         * APPLY CORRECTION
-         */
         Button apply = new Button(this);
         apply.setText("APPLY CORRECTION TO SELECTED CELL");
-
         apply.setOnClickListener(v -> applyCorrection());
-
         root.addView(apply);
 
-        /*
-         * RESET
-         */
         Button reset = new Button(this);
         reset.setText("RESET MAP TO 100");
-
         reset.setOnClickListener(v -> resetMap());
-
         root.addView(reset);
 
         setContentView(root);
     }
 
+    private void buildAxes() {
+        // 61 rows distributed across the requested 0–16000 RPM range.
+        for (int i = 0; i < RPM_ROWS; i++) {
+            int rpm = (int) Math.round((16000.0 * i) / (RPM_ROWS - 1));
+            rpmAxis[i] = String.valueOf(rpm);
+        }
+
+        // 21 TPS columns: 0, 5, ... 100%.
+        for (int i = 0; i < TPS_COLS; i++) {
+            tpsAxis[i] = String.valueOf(i * 5);
+        }
+    }
+
     private EditText createInput(String hint, String value) {
-
         EditText edit = new EditText(this);
-
         edit.setHint(hint);
         edit.setText(value);
-        edit.setTextSize(17);
+        edit.setTextSize(16);
         edit.setSingleLine(true);
-
-        edit.setInputType(
-                InputType.TYPE_CLASS_NUMBER |
-                InputType.TYPE_NUMBER_FLAG_DECIMAL |
-                InputType.TYPE_NUMBER_FLAG_SIGNED
-        );
-
-        edit.setPadding(10,5,10,5);
-
+        edit.setInputType(InputType.TYPE_CLASS_NUMBER
+                | InputType.TYPE_NUMBER_FLAG_DECIMAL
+                | InputType.TYPE_NUMBER_FLAG_SIGNED);
+        edit.setPadding(10, 2, 10, 2);
         return edit;
     }
 
     private TextView createHeader(String text) {
-
         TextView view = new TextView(this);
-
         view.setText(text);
-        view.setTextSize(12);
+        view.setTextSize(10);
         view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         view.setGravity(Gravity.CENTER);
         view.setTextColor(Color.WHITE);
         view.setBackgroundColor(Color.DKGRAY);
-        view.setPadding(5,5,5,5);
+        view.setPadding(3, 3, 3, 3);
 
-        TableRow.LayoutParams params =
-                new TableRow.LayoutParams(85,60);
-
-        params.setMargins(1,1,1,1);
-
-        view.setLayoutParams(params);
-
+        TableRow.LayoutParams p = new TableRow.LayoutParams(78, 54);
+        p.setMargins(1, 1, 1, 1);
+        view.setLayoutParams(p);
         return view;
     }
 
     private void calculateCorrection() {
-
         try {
+            double actual = Double.parseDouble(afrInput.getText().toString());
+            double target = Double.parseDouble(targetInput.getText().toString());
 
-            double actual =
-                    Double.parseDouble(
-                            afrInput.getText().toString()
-                    );
+            correction = AutoTuneEngine.correctionPercent(actual, target);
 
-            double target =
-                    Double.parseDouble(
-                            targetInput.getText().toString()
-                    );
-
-            /*
-             * AFR correction formula
-             *
-             * correction =
-             * (actual / target - 1) × 100
-             */
-            correction =
-                    ((actual / target) - 1.0) * 100.0;
-
-            /*
-             * Limit correction
-             * to prevent extreme values.
-             */
-            if (correction > 30)
-                correction = 30;
-
-            if (correction < -30)
-                correction = -30;
-
-            correctionText.setText(
-                    String.format(
-                            Locale.US,
-                            "Fuel Correction: %.1f %%",
-                            correction
-                    )
-            );
+            correctionText.setText(String.format(Locale.US,
+                    "Fuel Correction: %.1f %%", correction));
 
             status.setText("STATUS: CORRECTION CALCULATED");
-
+            status.setTextColor(Color.DKGRAY);
         } catch (Exception e) {
-
-            Toast.makeText(
-                    this,
-                    "Periksa nilai AFR",
-                    Toast.LENGTH_SHORT
-            ).show();
+            Toast.makeText(this, "Periksa nilai AFR", Toast.LENGTH_SHORT).show();
         }
     }
 
     private void applyCorrection() {
-
         if (selectedCell == null) {
-
-            Toast.makeText(
-                    this,
-                    "Pilih cell fuel map terlebih dahulu",
-                    Toast.LENGTH_SHORT
-            ).show();
-
+            Toast.makeText(this, "Pilih cell fuel map terlebih dahulu",
+                    Toast.LENGTH_SHORT).show();
             return;
         }
 
         try {
+            double current = Double.parseDouble(selectedCell.getText().toString());
+            double newValue = AutoTuneEngine.applyCorrection(current, correction);
 
-            double current =
-                    Double.parseDouble(
-                            selectedCell
-                                    .getText()
-                                    .toString()
-                    );
+            selectedCell.setText(AutoTuneEngine.format(newValue));
 
-            double newValue =
-                    current * (1.0 + correction / 100.0);
-
-            /*
-             * Safety limit.
-             */
-            if (newValue < 20)
-                newValue = 20;
-
-            if (newValue > 200)
-                newValue = 200;
-
-            selectedCell.setText(
-                    String.format(
-                            Locale.US,
-                            "%.1f",
-                            newValue
-                    )
-            );
-
-            status.setText(
-                    "STATUS: CELL UPDATED"
-            );
+            status.setText("UPDATED: RPM " + rpmAxis[selectedRow]
+                    + " / TPS " + tpsAxis[selectedCol]
+                    + "% -> " + AutoTuneEngine.format(newValue));
 
         } catch (Exception e) {
-
-            Toast.makeText(
-                    this,
-                    "Nilai cell tidak valid",
-                    Toast.LENGTH_SHORT
-            ).show();
+            Toast.makeText(this, "Nilai cell tidak valid",
+                    Toast.LENGTH_SHORT).show();
         }
     }
 
     private void resetMap() {
-
-        for (int r = 0; r < 16; r++) {
-
-            for (int c = 0; c < 16; c++) {
-
+        for (int r = 0; r < RPM_ROWS; r++) {
+            for (int c = 0; c < TPS_COLS; c++) {
                 fuelCells[r][c].setText("100");
             }
         }
 
+        selectedCell = null;
+        selectedRow = -1;
+        selectedCol = -1;
         status.setText("STATUS: MAP RESET");
-
-        Toast.makeText(
-                this,
-                "Fuel map kembali ke 100",
-                Toast.LENGTH_SHORT
-        ).show();
+        status.setTextColor(Color.DKGRAY);
     }
 }
