@@ -339,6 +339,22 @@ public class MainActivity extends Activity {
         mapEcuActions.addView(compareMap, new LinearLayout.LayoutParams(0, 55, 1));
         root.addView(mapEcuActions);
 
+        TextView writeLock = new TextView(this);
+        writeLock.setText("ECU WRITE: LOCKED — menunggu verifikasi packet WRITE/FuelCorrection asli");
+        writeLock.setTextSize(14);
+        writeLock.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        writeLock.setGravity(Gravity.CENTER);
+        writeLock.setPadding(4, 8, 4, 8);
+        root.addView(writeLock);
+
+        Button writeMapLocked = new Button(this);
+        writeMapLocked.setText("WRITE MAP TO ECU (LOCKED)");
+        writeMapLocked.setOnClickListener(v ->
+                Toast.makeText(this,
+                        "WRITE dikunci untuk mencegah packet yang belum terverifikasi dikirim ke ECU.",
+                        Toast.LENGTH_LONG).show());
+        root.addView(writeMapLocked);
+
         Button reset = new Button(this);
         reset.setText("RESET MAP TO 100");
         reset.setOnClickListener(v -> resetMap());
@@ -581,13 +597,14 @@ public class MainActivity extends Activity {
             try { app[c] = Float.parseFloat(fuelCells[row][c].getText().toString()); }
             catch (Exception e) { app[c] = 0f; }
         }
-        float[] ecu = EcuProtocol.normalizeMapRow(app);
         StringBuilder b = new StringBuilder();
         b.append("ROW RPM ").append(EcuProtocol.rpmForRow(row)).append("\n");
         b.append("TPS | APP | ECU | DIFF\n");
+        b.append("ECU row belum tersedia dari packet map yang terverifikasi.\n");
+        b.append("COMPARE saat ini hanya menyiapkan struktur 21-cell; tidak mengarang nilai ECU.\n\n");
         for (int c = 0; c < TPS_COLS; c++) {
             b.append(EcuProtocol.TPS_BREAKPOINTS[c]).append("% | ")
-             .append(String.format(Locale.US, "%.2f | %.2f | %.2f\n", app[c], ecu[c], ecu[c] - app[c]));
+             .append(String.format(Locale.US, "%.2f | -- | --\n", app[c]));
         }
         new android.app.AlertDialog.Builder(this)
                 .setTitle("MAP COMPARE")
