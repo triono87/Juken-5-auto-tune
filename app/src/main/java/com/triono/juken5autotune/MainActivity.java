@@ -11,6 +11,7 @@ import android.bluetooth.BluetoothDevice;
 import android.os.Build;
 import android.Manifest;
 import android.content.pm.PackageManager;
+import android.content.SharedPreferences;
 
 import java.util.Locale;
 import java.util.ArrayList;
@@ -46,12 +47,15 @@ public class MainActivity extends Activity {
     private TextView analyzerStatus;
     private Button recordButton;
     private final ProtocolAnalyzer protocolAnalyzer = new ProtocolAnalyzer();
+    private SharedPreferences mapPrefs;
+    private long lastAutoTuneUpdateMs = 0L;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         buildAxes();
+        mapPrefs = getSharedPreferences("fuel_map", MODE_PRIVATE);
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -313,11 +317,23 @@ public class MainActivity extends Activity {
         apply.setOnClickListener(v -> applyCorrection());
         root.addView(apply);
 
+        LinearLayout mapActions = new LinearLayout(this);
+        Button saveMapButton = new Button(this);
+        saveMapButton.setText("SAVE MAP");
+        saveMapButton.setOnClickListener(v -> saveMap());
+        Button loadMapButton = new Button(this);
+        loadMapButton.setText("LOAD MAP");
+        loadMapButton.setOnClickListener(v -> loadMap());
+        mapActions.addView(saveMapButton, new LinearLayout.LayoutParams(0, 55, 1));
+        mapActions.addView(loadMapButton, new LinearLayout.LayoutParams(0, 55, 1));
+        root.addView(mapActions);
+
         Button reset = new Button(this);
         reset.setText("RESET MAP TO 100");
         reset.setOnClickListener(v -> resetMap());
         root.addView(reset);
 
+        loadMap();
         setContentView(root);
     }
 
@@ -489,26 +505,27 @@ public class MainActivity extends Activity {
         tpsInput.setText(String.valueOf(live.tps));
         afrInput.setText(String.format(Locale.US, "%.2f", live.afr));
         if (autoTuneRunning && live.afr > 0f) {
-            try {
-                double target = Double.parseDouble(targetInput.getText().toString());
-                correction = AutoTuneEngine.correctionPercent(live.afr, target);
-
-                int row = EcuProtocol.rowForRpm(live.rpm);
-                int col = EcuProtocol.colForTps(live.tps);
-                selectedRow = row;
-                selectedCol = col;
-                selectedCell = fuelCells[row][col];
-
-                double current = Double.parseDouble(selectedCell.getText().toString());
-                double learned = AutoTuneEngine.learnedCorrection(correction, 0.25);
-                double next = AutoTuneEngine.applyCorrection(current, learned);
-                selectedCell.setText(String.format(Locale.US, "%.2f", next));
-
-                correctionText.setText(String.format(Locale.US,
-                        "LIVE CORR %.1f%% | CELL RPM %d / TPS %d%% | MAP %.2f",
-                        learned, EcuProtocol.rpmForRow(row), EcuProtocol.TPS_BREAKPOINTS[col], next));
-                status.setText("STATUS: AUTO TUNE → ACTIVE CELL UPDATED");
-            } catch (Exception ignored) {}
+            long now = android.os.SystemClock.elapsedRealtime();
+            if (now - lastAutoTuneUpdateMs >= 500L) {
+                try {
+                    double target = Double.parseDouble(targetInput.getText().toString());
+                    correction = AutoTuneEngine.correctionPercent(live.afr, target);
+                    int row = EcuProtocol.rowForRpm(live.rpm);
+                    int col = EcuProtocol.colForTps(live.tps);
+                    selectedRow = row;
+                    selectedCol = col;
+                    selectedCell = fuelCells[row][col];
+                    double current = Double.parseDouble(selectedCell.getText().toString());
+                    double learned = AutoTuneEngine.learnedCorrection(correction, 0.10);
+                    double next = AutoTuneEngine.applyCorrection(current, learned);
+                    selectedCell.setText(String.format(Locale.US, "%.2f", next));
+                    lastAutoTuneUpdateMs = now;
+                    correctionText.setText(String.format(Locale.US,
+                            "LIVE CORR %.1f%% | CELL RPM %d / TPS %d%% | MAP %.2f",
+                            learned, EcuProtocol.rpmForRow(row), EcuProtocol.TPS_BREAKPOINTS[col], next));
+                    status.setText("STATUS: AUTO TUNE -> ACTIVE CELL UPDATED");
+                } catch (Exception ignored) {}
+            }
         }
     }
     private int nearestRpmRow(int rpm) {
@@ -517,6 +534,28 @@ public class MainActivity extends Activity {
 
     private int nearestTpsCol(int tps) {
         return EcuProtocol.colForTps(tps);
+    }
+
+    private void saveMap() {
+        if (mapPrefs == null || fuelCells[0][0] == null) return;
+        SharedPreferences.Editor e = mapPrefs.edit();
+        for (int r = 0; r < RPM_ROWS; r++) {
+            for (int c = 0; c < TPS_COLS; c++) {
+                e.putString("cell_" + r + "_" + c, fuelCells[r][c].getText().toString());
+            }
+        }
+        e.apply();
+        status.setText("STATUS: MAP SAVED");
+        Toast.makeText(this, "Fuel map tersimpan", Toast.LENGTH_SHORT).show();
+    }
+
+    private void loadMap() {
+        if (mapPrefs == null || fuelCells[0][0] == null) return;
+        for (int r = 0; r < RPM_ROWS; r++) {
+            for (int c = 0; c < TPS_COLS; c++) {
+                fuelCells[r][c].setText(mapPrefs.getString("cell_" + r + "_" + c, "100"));
+            }
+        }
     }
 
     private void calculateCorrection() {
@@ -569,6 +608,7 @@ public class MainActivity extends Activity {
         selectedCell = null;
         selectedRow = -1;
         selectedCol = -1;
+        saveMap();
         status.setText("STATUS: MAP RESET");
         status.setTextColor(Color.DKGRAY);
     }
