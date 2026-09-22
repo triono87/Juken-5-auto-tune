@@ -492,10 +492,33 @@ public class MainActivity extends Activity {
             try {
                 double target = Double.parseDouble(targetInput.getText().toString());
                 correction = AutoTuneEngine.correctionPercent(live.afr, target);
-                correctionText.setText(String.format(Locale.US, "LIVE Fuel Correction: %.1f %%", correction));
+
+                int row = EcuProtocol.rowForRpm(live.rpm);
+                int col = EcuProtocol.colForTps(live.tps);
+                selectedRow = row;
+                selectedCol = col;
+                selectedCell = fuelCells[row][col];
+
+                double current = Double.parseDouble(selectedCell.getText().toString());
+                double learned = AutoTuneEngine.learnedCorrection(correction, 0.25);
+                double next = AutoTuneEngine.applyCorrection(current, learned);
+                selectedCell.setText(String.format(Locale.US, "%.2f", next));
+
+                correctionText.setText(String.format(Locale.US,
+                        "LIVE CORR %.1f%% | CELL RPM %d / TPS %d%% | MAP %.2f",
+                        learned, EcuProtocol.rpmForRow(row), EcuProtocol.TPS_BREAKPOINTS[col], next));
+                status.setText("STATUS: AUTO TUNE → ACTIVE CELL UPDATED");
             } catch (Exception ignored) {}
         }
     }
+    private int nearestRpmRow(int rpm) {
+        return EcuProtocol.rowForRpm(rpm);
+    }
+
+    private int nearestTpsCol(int tps) {
+        return EcuProtocol.colForTps(tps);
+    }
+
     private void calculateCorrection() {
         try {
             double actual = Double.parseDouble(afrInput.getText().toString());
