@@ -98,6 +98,7 @@ public final class BluetoothEcuTransport {
         try {
             while (running && input != null) {
                 int n = input.read(buffer);
+                if (n == -1) break;
                 if (n > 0) {
                     byte[] packet = new byte[n];
                     System.arraycopy(buffer, 0, packet, 0, n);
