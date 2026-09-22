@@ -68,7 +68,8 @@ public final class ProtocolAnalyzer {
             for (byte b : f.data) {
                 out.append(String.format(java.util.Locale.US, "%02X ", b & 0xFF));
             }
-            out.append('\\n');
+            out.append('\
+');
         }
         return out.toString();
     }
