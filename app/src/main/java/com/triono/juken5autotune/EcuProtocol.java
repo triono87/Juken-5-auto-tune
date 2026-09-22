@@ -99,6 +99,10 @@ public final class EcuProtocol {
         return mapOpcode + ";2;" + clamp(row, 0, RPM_ROWS - 1) + "\r\n";
     }
 
+    /**
+     * Candidate-only builder. It is intentionally not called by MainActivity
+     * because the real Juken 5 write opcode/packet is not verified.
+     */
     public static String writeMapCommand(String writeOpcode, int row, float[] values,
                                          boolean decimal) {
         StringBuilder b = new StringBuilder();
