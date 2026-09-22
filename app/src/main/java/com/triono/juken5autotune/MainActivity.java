@@ -40,6 +40,9 @@ public class MainActivity extends Activity {
     private Spinner btSpinner;
     private TextView btStatus;
     private TextView rawData;
+    private TextView analyzerStatus;
+    private Button recordButton;
+    private final ProtocolAnalyzer protocolAnalyzer = new ProtocolAnalyzer();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -96,7 +99,7 @@ public class MainActivity extends Activity {
         Button connectBt = new Button(this);
         connectBt.setText("CONNECT ECU");
         connectBt.setOnClickListener(v -> connectSelectedBluetooth());
-        btButtons.addView(connectBt, new LinearLayout.LayoutParams(WRAP_CONTENT, 52));
+        btButtons.addView(connectBt, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, 52));
         btPanel.addView(btButtons);
 
         rawData = new TextView(this);
@@ -104,7 +107,42 @@ public class MainActivity extends Activity {
         rawData.setTextSize(11);
         rawData.setMaxLines(3);
         btPanel.addView(rawData);
-        root.addView(btPanel);
+        root.addView(btPanel);\n        LinearLayout analyzerPanel = new LinearLayout(this);
+        analyzerPanel.setOrientation(LinearLayout.VERTICAL);
+
+        TextView analyzerTitle = new TextView(this);
+        analyzerTitle.setText("ECU PROTOCOL ANALYZER");
+        analyzerTitle.setTextSize(16);
+        analyzerTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        analyzerPanel.addView(analyzerTitle);
+
+        analyzerStatus = new TextView(this);
+        analyzerStatus.setText("CAPTURE: OFF | Frames: 0");
+        analyzerPanel.addView(analyzerStatus);
+
+        LinearLayout analyzerButtons = new LinearLayout(this);
+        recordButton = new Button(this);
+        recordButton.setText("START CAPTURE");
+        recordButton.setOnClickListener(v -> toggleCapture());
+        analyzerButtons.addView(recordButton, new LinearLayout.LayoutParams(0, 52, 1));
+
+        Button clearCapture = new Button(this);
+        clearCapture.setText("CLEAR");
+        clearCapture.setOnClickListener(v -> {
+            protocolAnalyzer.clear();
+            updateAnalyzerStatus();
+        });
+        analyzerButtons.addView(clearCapture, new LinearLayout.LayoutParams(0, 52, 1));
+
+        Button exportCapture = new Button(this);
+        exportCapture.setText("SHOW CAPTURE");
+        exportCapture.setOnClickListener(v -> showCapture());
+        analyzerButtons.addView(exportCapture, new LinearLayout.LayoutParams(0, 52, 1));
+
+        analyzerPanel.addView(analyzerButtons);
+        root.addView(analyzerPanel);
+
+
 
         ecuTransport = new BluetoothEcuTransport(this, new BluetoothEcuTransport.Listener() {
             @Override public void onConnected(BluetoothDevice device) {
@@ -113,7 +151,7 @@ public class MainActivity extends Activity {
             }
             @Override public void onBytes(byte[] data, int length) {
                 StringBuilder hex = new StringBuilder();
-                for (int i = 0; i < length; i++) hex.append(String.format(Locale.US, "%02X ", data[i] & 0xFF));
+                protocolAnalyzer.add(data, length);\n                updateAnalyzerStatus();\n                for (int i = 0; i < length; i++) hex.append(String.format(Locale.US, "%02X ", data[i] & 0xFF));
                 rawData.setText("RAW ECU DATA: " + hex.toString().trim());
             }
             @Override public void onDisconnected() {
@@ -282,6 +320,40 @@ public class MainActivity extends Activity {
         }
         btStatus.setText("ECU BLUETOOTH: CONNECTING...");
         ecuTransport.connect(devices.get(pos));
+    }
+
+    private void toggleCapture() {
+        if (protocolAnalyzer.isRecording()) {
+            protocolAnalyzer.stop();
+            recordButton.setText("START CAPTURE");
+        } else {
+            protocolAnalyzer.start();
+            recordButton.setText("STOP CAPTURE");
+        }
+        updateAnalyzerStatus();
+    }
+
+    private void updateAnalyzerStatus() {
+        if (analyzerStatus != null) {
+            analyzerStatus.setText((protocolAnalyzer.isRecording() ? "CAPTURE: ON | " : "CAPTURE: OFF | ")
+                    + protocolAnalyzer.summary());
+        }
+    }
+
+    private void showCapture() {
+        TextView view = new TextView(this);
+        view.setText(protocolAnalyzer.exportText().isEmpty()
+                ? "Belum ada frame."
+                : protocolAnalyzer.exportText());
+        view.setTextSize(11);
+        view.setPadding(20, 20, 20, 20);
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(view);
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Captured ECU Frames")
+                .setView(scroll)
+                .setPositiveButton("TUTUP", null)
+                .show();
     }
 
     @Override protected void onDestroy() {
