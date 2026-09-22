@@ -45,6 +45,7 @@ public class MainActivity extends Activity {
     private TextView liveTelemetry;
     private final StringBuilder ecuTextBuffer = new StringBuilder();
     private TextView analyzerStatus;
+    private TextView protocolEvents;
     private Button recordButton;
     private final ProtocolAnalyzer protocolAnalyzer = new ProtocolAnalyzer();
     private SharedPreferences mapPrefs;
@@ -169,6 +170,15 @@ public class MainActivity extends Activity {
         analyzeCapture.setOnClickListener(v -> showAnalysis());
         analyzerButtons.addView(analyzeCapture, new LinearLayout.LayoutParams(0, 52, 1));
 
+        Button fuelPacket = new Button(this);
+        fuelPacket.setText("FUEL CORRECTION CANDIDATES");
+        fuelPacket.setOnClickListener(v -> showFuelCorrectionCandidates());
+        analyzerPanel.addView(fuelPacket);
+        protocolEvents = new TextView(this);
+        protocolEvents.setText("PROTOCOL EVENTS: -");
+        protocolEvents.setTextSize(11);
+        protocolEvents.setMaxLines(6);
+        analyzerPanel.addView(protocolEvents);
         analyzerPanel.addView(analyzerButtons);
         root.addView(analyzerPanel);
 
@@ -414,6 +424,21 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void showFuelCorrectionCandidates() {
+        TextView view = new TextView(this);
+        view.setText(FuelCorrectionCaptureAnalyzer.analyze(
+                FrameAnalysis.snapshot(protocolAnalyzer)));
+        view.setTextSize(11);
+        view.setPadding(20, 20, 20, 20);
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(view);
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Fuel Correction Investigation")
+                .setView(scroll)
+                .setPositiveButton("TUTUP", null)
+                .show();
+    }
+
     private void showAnalysis() {
         TextView view = new TextView(this);
         view.setText(FrameAnalysis.analyze(FrameAnalysis.snapshot(protocolAnalyzer)));
@@ -521,6 +546,12 @@ public class MainActivity extends Activity {
     }
 
     private void handleProtocolLine(String line) {
+        ProtocolMessageClassifier.Message message = ProtocolMessageClassifier.classify(line);
+        if (message != null && protocolEvents != null) {
+            protocolEvents.setText(String.format(Locale.US,
+                    "PROTOCOL EVENTS: %s | fields=%d | len=%d\\n%s",
+                    message.type.name(), message.fieldCount, message.byteLength, message.raw));
+        }
         EcuProtocol.LiveData live = EcuProtocol.parseLiveLine(line);
         if (live == null) return;
         liveTelemetry.setText(String.format(Locale.US,
