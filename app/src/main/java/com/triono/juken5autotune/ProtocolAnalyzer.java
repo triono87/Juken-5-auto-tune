@@ -42,7 +42,11 @@ public final class ProtocolAnalyzer {
         return frames.size();
     }
 
-    public synchronized List<Frame> snapshot() {\n        return new ArrayList<>(frames);\n    }\n\n    public synchronized String summary() {
+    public synchronized List<Frame> snapshot() {
+        return new ArrayList<>(frames);
+    }
+
+    public synchronized String summary() {
         if (frames.isEmpty()) return "Frames: 0";
         int min = Integer.MAX_VALUE, max = 0, total = 0;
         for (Frame f : frames) {
@@ -64,7 +68,7 @@ public final class ProtocolAnalyzer {
             for (byte b : f.data) {
                 out.append(String.format(java.util.Locale.US, "%02X ", b & 0xFF));
             }
-            out.append('\n');
+            out.append('\\n');
         }
         return out.toString();
     }
