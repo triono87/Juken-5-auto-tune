@@ -13,6 +13,7 @@ import android.Manifest;
 import android.content.pm.PackageManager;
 
 import java.util.Locale;
+import java.util.ArrayList;
 
 public class MainActivity extends Activity {
 
@@ -107,7 +108,8 @@ public class MainActivity extends Activity {
         rawData.setTextSize(11);
         rawData.setMaxLines(3);
         btPanel.addView(rawData);
-        root.addView(btPanel);\n        LinearLayout analyzerPanel = new LinearLayout(this);
+        root.addView(btPanel);
+        LinearLayout analyzerPanel = new LinearLayout(this);
         analyzerPanel.setOrientation(LinearLayout.VERTICAL);
 
         TextView analyzerTitle = new TextView(this);
@@ -139,6 +141,11 @@ public class MainActivity extends Activity {
         exportCapture.setOnClickListener(v -> showCapture());
         analyzerButtons.addView(exportCapture, new LinearLayout.LayoutParams(0, 52, 1));
 
+        Button analyzeCapture = new Button(this);
+        analyzeCapture.setText("ANALYZE");
+        analyzeCapture.setOnClickListener(v -> showAnalysis());
+        analyzerButtons.addView(analyzeCapture, new LinearLayout.LayoutParams(0, 52, 1));
+
         analyzerPanel.addView(analyzerButtons);
         root.addView(analyzerPanel);
 
@@ -151,7 +158,9 @@ public class MainActivity extends Activity {
             }
             @Override public void onBytes(byte[] data, int length) {
                 StringBuilder hex = new StringBuilder();
-                protocolAnalyzer.add(data, length);\n                updateAnalyzerStatus();\n                for (int i = 0; i < length; i++) hex.append(String.format(Locale.US, "%02X ", data[i] & 0xFF));
+                protocolAnalyzer.add(data, length);
+                updateAnalyzerStatus();
+                for (int i = 0; i < length; i++) hex.append(String.format(Locale.US, "%02X ", data[i] & 0xFF));
                 rawData.setText("RAW ECU DATA: " + hex.toString().trim());
             }
             @Override public void onDisconnected() {
@@ -338,6 +347,20 @@ public class MainActivity extends Activity {
             analyzerStatus.setText((protocolAnalyzer.isRecording() ? "CAPTURE: ON | " : "CAPTURE: OFF | ")
                     + protocolAnalyzer.summary());
         }
+    }
+
+    private void showAnalysis() {
+        TextView view = new TextView(this);
+        view.setText(FrameAnalysis.analyze(FrameAnalysis.snapshot(protocolAnalyzer)));
+        view.setTextSize(12);
+        view.setPadding(20, 20, 20, 20);
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(view);
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("ECU Frame Analysis")
+                .setView(scroll)
+                .setPositiveButton("TUTUP", null)
+                .show();
     }
 
     private void showCapture() {
