@@ -91,7 +91,7 @@ public class MainActivity extends Activity {
         Button refreshBt = new Button(this);
         refreshBt.setText("REFRESH");
         refreshBt.setOnClickListener(v -> loadPairedBluetooth());
-        btButtons.addView(refreshBt, new LinearLayout.LayoutParams(WRAP_CONTENT, 52));
+        btButtons.addView(refreshBt, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, 52));
 
         Button connectBt = new Button(this);
         connectBt.setText("CONNECT ECU");
