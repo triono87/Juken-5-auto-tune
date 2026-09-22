@@ -328,6 +328,17 @@ public class MainActivity extends Activity {
         mapActions.addView(loadMapButton, new LinearLayout.LayoutParams(0, 55, 1));
         root.addView(mapActions);
 
+        LinearLayout mapEcuActions = new LinearLayout(this);
+        Button readMap = new Button(this);
+        readMap.setText("READ ECU MAP");
+        readMap.setOnClickListener(v -> requestMapRead());
+        Button compareMap = new Button(this);
+        compareMap.setText("COMPARE MAP");
+        compareMap.setOnClickListener(v -> showMapCompare());
+        mapEcuActions.addView(readMap, new LinearLayout.LayoutParams(0, 55, 1));
+        mapEcuActions.addView(compareMap, new LinearLayout.LayoutParams(0, 55, 1));
+        root.addView(mapEcuActions);
+
         Button reset = new Button(this);
         reset.setText("RESET MAP TO 100");
         reset.setOnClickListener(v -> resetMap());
@@ -556,6 +567,33 @@ public class MainActivity extends Activity {
                 fuelCells[r][c].setText(mapPrefs.getString("cell_" + r + "_" + c, "100"));
             }
         }
+    }
+
+    private void requestMapRead() {
+        Toast.makeText(this, "READ ECU MAP: opcode Juken 5 belum diverifikasi; belum mengirim perintah ke ECU.", Toast.LENGTH_LONG).show();
+        status.setText("STATUS: ECU MAP READ READY (SAFE / NO COMMAND SENT)");
+    }
+
+    private void showMapCompare() {
+        int row = selectedRow >= 0 ? selectedRow : 0;
+        float[] app = new float[TPS_COLS];
+        for (int c = 0; c < TPS_COLS; c++) {
+            try { app[c] = Float.parseFloat(fuelCells[row][c].getText().toString()); }
+            catch (Exception e) { app[c] = 0f; }
+        }
+        float[] ecu = EcuProtocol.normalizeMapRow(app);
+        StringBuilder b = new StringBuilder();
+        b.append("ROW RPM ").append(EcuProtocol.rpmForRow(row)).append("\n");
+        b.append("TPS | APP | ECU | DIFF\n");
+        for (int c = 0; c < TPS_COLS; c++) {
+            b.append(EcuProtocol.TPS_BREAKPOINTS[c]).append("% | ")
+             .append(String.format(Locale.US, "%.2f | %.2f | %.2f\n", app[c], ecu[c], ecu[c] - app[c]));
+        }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("MAP COMPARE")
+                .setMessage(b.toString())
+                .setPositiveButton("TUTUP", null)
+                .show();
     }
 
     private void calculateCorrection() {
