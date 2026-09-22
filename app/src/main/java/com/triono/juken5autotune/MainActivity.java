@@ -7,6 +7,10 @@ import android.graphics.Typeface;
 import android.text.InputType;
 import android.view.Gravity;
 import android.widget.*;
+import android.bluetooth.BluetoothDevice;
+import android.os.Build;
+import android.Manifest;
+import android.content.pm.PackageManager;
 
 import java.util.Locale;
 
@@ -32,6 +36,10 @@ public class MainActivity extends Activity {
 
     private double correction = 0.0;
     private boolean autoTuneRunning = false;
+    private BluetoothEcuTransport ecuTransport;
+    private Spinner btSpinner;
+    private TextView btStatus;
+    private TextView rawData;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -66,6 +74,57 @@ public class MainActivity extends Activity {
         status.setGravity(Gravity.CENTER);
         status.setPadding(4, 8, 4, 8);
         root.addView(status);
+
+        LinearLayout btPanel = new LinearLayout(this);
+        btPanel.setOrientation(LinearLayout.VERTICAL);
+
+        btStatus = new TextView(this);
+        btStatus.setText("ECU BLUETOOTH: DISCONNECTED");
+        btStatus.setTextSize(15);
+        btStatus.setGravity(Gravity.CENTER);
+        btPanel.addView(btStatus);
+
+        LinearLayout btButtons = new LinearLayout(this);
+        btSpinner = new Spinner(this);
+        btButtons.addView(btSpinner, new LinearLayout.LayoutParams(0, 52, 1));
+
+        Button refreshBt = new Button(this);
+        refreshBt.setText("REFRESH");
+        refreshBt.setOnClickListener(v -> loadPairedBluetooth());
+        btButtons.addView(refreshBt, new LinearLayout.LayoutParams(WRAP_CONTENT, 52));
+
+        Button connectBt = new Button(this);
+        connectBt.setText("CONNECT ECU");
+        connectBt.setOnClickListener(v -> connectSelectedBluetooth());
+        btButtons.addView(connectBt, new LinearLayout.LayoutParams(WRAP_CONTENT, 52));
+        btPanel.addView(btButtons);
+
+        rawData = new TextView(this);
+        rawData.setText("RAW ECU DATA: -");
+        rawData.setTextSize(11);
+        rawData.setMaxLines(3);
+        btPanel.addView(rawData);
+        root.addView(btPanel);
+
+        ecuTransport = new BluetoothEcuTransport(this, new BluetoothEcuTransport.Listener() {
+            @Override public void onConnected(BluetoothDevice device) {
+                btStatus.setText("ECU BLUETOOTH: CONNECTED - " + device.getName());
+                status.setText("STATUS: ECU CONNECTED (RAW MODE)");
+            }
+            @Override public void onBytes(byte[] data, int length) {
+                StringBuilder hex = new StringBuilder();
+                for (int i = 0; i < length; i++) hex.append(String.format(Locale.US, "%02X ", data[i] & 0xFF));
+                rawData.setText("RAW ECU DATA: " + hex.toString().trim());
+            }
+            @Override public void onDisconnected() {
+                btStatus.setText("ECU BLUETOOTH: DISCONNECTED");
+            }
+            @Override public void onError(String message) {
+                btStatus.setText("ECU BLUETOOTH: ERROR");
+                Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show();
+            }
+        });
+        loadPairedBluetooth();
 
         LinearLayout inputPanel = new LinearLayout(this);
         inputPanel.setOrientation(LinearLayout.VERTICAL);
@@ -191,6 +250,43 @@ public class MainActivity extends Activity {
         root.addView(reset);
 
         setContentView(root);
+    }
+
+    private void loadPairedBluetooth() {
+        if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT}, 501);
+            return;
+        }
+        if (!ecuTransport.isAvailable()) {
+            btStatus.setText("ECU BLUETOOTH: NOT AVAILABLE");
+            return;
+        }
+        ArrayList<String> names = new ArrayList<>();
+        for (BluetoothDevice d : ecuTransport.pairedDevices()) {
+            names.add(d.getName() == null ? d.getAddress() : d.getName());
+        }
+        if (names.isEmpty()) names.add("Tidak ada perangkat paired");
+        btSpinner.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, names));
+    }
+
+    private void connectSelectedBluetooth() {
+        if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT}, 501);
+            return;
+        }
+        java.util.List<BluetoothDevice> devices = ecuTransport.pairedDevices();
+        int pos = btSpinner.getSelectedItemPosition();
+        if (pos < 0 || pos >= devices.size()) {
+            Toast.makeText(this, "Pair modem Bluetooth ECU terlebih dahulu", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        btStatus.setText("ECU BLUETOOTH: CONNECTING...");
+        ecuTransport.connect(devices.get(pos));
+    }
+
+    @Override protected void onDestroy() {
+        if (ecuTransport != null) ecuTransport.disconnect();
+        super.onDestroy();
     }
 
     private void buildAxes() {
