@@ -38,7 +38,7 @@ public final class ProtocolMessageClassifier {
 
         // These are deliberately only candidates. No opcode is assigned here.
         String[] p = s.split(";");
-        if (p.length >= 22 && allNumericFrom(p, 1)) {
+        if (p.length == 22 && allNumericFrom(p, 1)) {
             return new Message(Type.MAP_CANDIDATE, s, p.length);
         }
 
